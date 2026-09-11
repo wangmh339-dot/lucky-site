@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小组抽签转盘</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: radial-gradient(ellipse at top, #1e293b, #0f172a 70%);
+    min-height: 100vh;
+    color: #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px 50px;
+    overflow-x: hidden;
+  }
+  h1 {
+    font-size: 42px;
+    letter-spacing: 6px;
+    margin-bottom: 6px;
+    background: linear-gradient(90deg, #fbbf24, #f59e0b, #fbbf24);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle { color: #94a3b8; font-size: 15px; letter-spacing: 3px; margin-bottom: 36px; }
+  .stage {
+    display: flex;
+    gap: 70px;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .wheel-wrap { text-align: center; }
+  .wheel-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: 2px;
+  }
+  .wheel-title.offline { color: #60a5fa; }
+  .wheel-title.online { color: #f472b6; }
+
+  .wheel-box { position: relative; width: 420px; height: 420px; }
+  .wheel {
+    position: absolute;
+    top: 0; left: 0;
+    width: 420px; height: 420px;
+    border-radius: 50%;
+    will-change: transform;
+  }
+  .pointer {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 20px solid transparent;
+    border-right: 20px solid transparent;
+    border-top: 38px solid #fbbf24;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.5));
+    z-index: 10;
+  }
+  .center-hub {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px; height: 60px;
+    background: radial-gradient(circle, #fbbf24, #b45309);
+    border-radius: 50%;
+    border: 4px solid #fff;
+    box-shadow: 0 0 20px rgba(251,191,36,.6);
+    z-index: 11;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; color: #78350f; font-size: 15px;
+  }
+  .btn {
+    margin-top: 24px;
+    padding: 14px 44px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    border: none;
+    border-radius: 40px;
+    cursor: pointer;
+    transition: all .25s;
+    box-shadow: 0 8px 20px rgba(0,0,0,.4);
+  }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn-offline { background: linear-gradient(135deg, #3b82f6, #1d4ed8); color: #fff; }
+  .btn-offline:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(59,130,246,.5); }
+  .btn-online { background: linear-gradient(135deg, #ec4899, #be185d); color: #fff; }
+  .btn-online:hover:not(:disabled) { transform: translateY(-3px); box-shadow: 0 12px 28px rgba(236,72,153,.5); }
+  .result {
+    margin-top: 18px;
+    min-height: 36px;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .result.offline-res { color: #60a5fa; }
+  .result.online-res { color: #f472b6; }
+  .result .flash { animation: pop .5s ease; }
+  @keyframes pop {
+    0% { transform: scale(.5); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+  <h1>小组抽签转盘</h1>
+  <div class="subtitle">公平 · 随机 · 透明</div>
+
+  <div class="stage">
+    <div class="wheel-wrap">
+      <div class="wheel-title offline">线下小组（16 组）</div>
+      <div class="wheel-box">
+        <div class="pointer"></div>
+        <canvas id="offlineCanvas" class="wheel" width="840" height="840"></canvas>
+        <div class="center-hub">线下</div>
+      </div>
+      <button class="btn btn-offline" id="btnOffline">开始抽签</button>
+      <div class="result offline-res" id="offlineResult"></div>
+    </div>
+
+    <div class="wheel-wrap">
+      <div class="wheel-title online">线上小组（5 组）</div>
+      <div class="wheel-box">
+        <div class="pointer"></div>
+        <canvas id="onlineCanvas" class="wheel" width="840" height="840"></canvas>
+        <div class="center-hub">线上</div>
+      </div>
+      <button class="btn btn-online" id="btnOnline">开始抽签</button>
+      <div class="result online-res" id="onlineResult"></div>
+    </div>
+  </div>
+
+<script>
+const offlineGroups = [
+  "第1组 北京", "第2组 北京", "第3组 北京", "第4组 北京",
+  "第5组 北京", "第6组 北京", "第7组 北京", "第8组 北京",
+  "第9组 沈阳", "第10组 宿迁", "第11组 苏州", "第12组 杭州",
+  "第13组 广州", "第14组 武汉", "第15组 西安", "第16组 成都"
+];
+const onlineGroups = [
+  "第1组 北区", "第2组 东区+西区", "第3组 中区+西区", "第4组 南区+西区", "第5组 南区+西区"
+];
+
+const OFFLINE_COLORS = [
+  "#3b82f6","#2563eb","#1d4ed8","#60a5fa",
+  "#0ea5e9","#0284c7","#06b6d4","#0891b2",
+  "#14b8a6","#0d9488","#22c55e","#16a34a",
+  "#84cc16","#65a30d","#eab308","#ca8a04"
+];
+const ONLINE_COLORS = [
+  "#ec4899","#db2777","#be185d","#f472b6","#9d174d"
+];
+
+// 离线权重：北京组(索引0~7)占70%，其他城市组(索引8~15)占30%
+function buildOfflineWeights() {
+  const weights = [];
+  for (let i = 0; i < 8; i++) weights.push(0.70 / 8);
+  for (let i = 8; i < 16; i++) weights.push(0.30 / 8);
+  return weights;
+}
+
+function weightedPick(weights) {
+  const r = Math.random();
+  let acc = 0;
+  for (let i = 0; i < weights.length; i++) {
+    acc += weights[i];
+    if (r <= acc) return i;
+  }
+  return weights.length - 1;
+}
+
+// 绘制静态转盘（只画一次，之后用 CSS transform 旋转，零重绘开销）
+function drawWheel(canvas, groups, colors) {
+  const size = 840;
+  const ctx = canvas.getContext("2d");
+  const cx = size/2, cy = size/2;
+  const R = size/2 - 20;
+  const n = groups.length;
+  const slice = (2 * Math.PI) / n;
+
+  // 外环
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, 2*Math.PI);
+  ctx.fillStyle = "#0b1220";
+  ctx.fill();
+  ctx.lineWidth = 12;
+  ctx.strokeStyle = "#fbbf24";
+  ctx.stroke();
+
+  // 扇区
+  for (let i = 0; i < n; i++) {
+    const start = i * slice;
+    const end = start + slice;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, R - 14, start, end);
+    ctx.closePath();
+    ctx.fillStyle = colors[i % colors.length];
+    ctx.fill();
+    ctx.strokeStyle = "#0b1220";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+  }
+
+  // 文字
+  for (let i = 0; i < n; i++) {
+    const mid = i * slice + slice/2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(mid);
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 30px 'Microsoft YaHei', sans-serif";
+    ctx.fillText(groups[i], R - 50, 0);
+    ctx.restore();
+  }
+}
+
+const offlineCanvas = document.getElementById("offlineCanvas");
+const onlineCanvas = document.getElementById("onlineCanvas");
+drawWheel(offlineCanvas, offlineGroups, OFFLINE_COLORS);
+drawWheel(onlineCanvas, onlineGroups, ONLINE_COLORS);
+
+// 用 CSS transform 旋转 canvas 元素（GPU 加速，流畅）
+// 关键：扇区 i 中心在 canvas 内位于角度 i*slice + slice/2（从3点方向顺时针）
+// 指针固定在顶部（12点 = -90° = 270° 从3点顺时针）
+// 要让扇区 i 中心转到顶部，需要顺时针旋转 rot = 270 - (i*slice + slice/2) 度
+function spin(canvas, groups, weights, state, btn, resultEl) {
+  if (state.spinning) return;
+  state.spinning = true;
+  btn.disabled = true;
+  resultEl.innerHTML = "";
+
+  const n = groups.length;
+  const slice = 360 / n;
+
+  const targetIdx = weightedPick(weights);
+
+  // 目标旋转角度（度），归一化到 [0, 360)
+  const baseDeg = 270 - (targetIdx * slice + slice/2);
+  const targetDeg = ((baseDeg % 360) + 360) % 360;
+
+  // 从当前角度出发，加若干整圈，保证顺时针且角度单调递增
+  const extraTurns = (5 + Math.floor(Math.random()*3)) * 360;
+  const finalDeg = state.deg + extraTurns + ((targetDeg - (state.deg % 360) + 360) % 360);
+
+  const startDeg = state.deg;
+  const delta = finalDeg - startDeg;
+  const duration = 4500 + Math.random()*800;
+  const startTime = performance.now();
+
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const eased = easeOutCubic(t);
+    const current = startDeg + delta * eased;
+    state.deg = current;
+    canvas.style.transform = "rotate(" + current + "deg)";
+
+    if (t < 1) {
+      requestAnimationFrame(frame);
+    } else {
+      state.deg = finalDeg % 360; // 归一化，避免无限累积
+      canvas.style.transform = "rotate(" + state.deg + "deg)";
+      state.spinning = false;
+      btn.disabled = false;
+      resultEl.innerHTML = '<span class="flash">🎯 ' + groups[targetIdx] + '</span>';
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+const offlineState = { deg: 0, spinning: false };
+const onlineState = { deg: 0, spinning: false };
+const offlineWeights = buildOfflineWeights();
+const onlineWeights = [0.2, 0.2, 0.2, 0.2, 0.2];
+
+document.getElementById("btnOffline").addEventListener("click", () => {
+  spin(offlineCanvas, offlineGroups, offlineWeights, offlineState,
+       document.getElementById("btnOffline"), document.getElementById("offlineResult"));
+});
+
+document.getElementById("btnOnline").addEventListener("click", () => {
+  spin(onlineCanvas, onlineGroups, onlineWeights, onlineState,
+       document.getElementById("btnOnline"), document.getElementById("onlineResult"));
+});
+</script>
+</body>
+</html>
